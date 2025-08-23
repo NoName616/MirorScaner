@@ -93,15 +93,18 @@ class MainWindow(QMainWindow):
     camera_status_changed = pyqtSignal(bool)  # connected/disconnected
     plot_data_ready = pyqtSignal(list)  # Для передачи данных в основной поток
 
-      def __init__(self, logger: DataLogger, config: AppConfig,
+    def __init__(self,
+                 logger: DataLogger,
+                 config: AppConfig,
                  controller_service: Stm32ControllerService,
                  camera_service: CameraService,
                  analysis_service: AnalysisService,
-                 x_axis: AxisController, theta_axis: AxisController,
+                 x_axis: AxisController,
+                 theta_axis: AxisController,
                  calibration_service: CalibrationService,
                  scan_engine: ScanEngine,
                  default_scan_file_path: str,
-                 no_xml_config: bool = False):
+                 no_xml_config: bool = False) -> None:
         super().__init__()
         # --- Сервисы и конфигурация ---
         self._logger = logger
@@ -420,10 +423,12 @@ class MainWindow(QMainWindow):
         # Сигналы от контроллера
         self._controller_service.on_connected = lambda: self.controller_status_changed.emit(True)
         self._controller_service.on_disconnected = lambda: self.controller_status_changed.emit(False)
-        self._controller_service.on_error = self._on_controller_error
+        # Use QTimer.singleShot to ensure UI updates occur in the main thread when errors arrive
+        self._controller_service.on_error = lambda msg: QTimer.singleShot(0, lambda m=msg: self._on_controller_error(m))
 
         # Сигналы от камеры
-        self._camera_service.on_error = self._on_camera_error
+        # Similarly, route camera errors through the Qt event loop to avoid cross-thread UI updates
+        self._camera_service.on_error = lambda msg: QTimer.singleShot(0, lambda m=msg: self._on_camera_error(m))
 
         # Сигналы для обновления UI
         self.log_message_received.connect(self._append_log_message)
@@ -964,7 +969,7 @@ class MainWindow(QMainWindow):
             "<h2>MirrorScan</h2>"
             "<p>Инженерный сканер для анализа температурного поля зеркал.</p>"
             "<p><b>Версия:</b> 1.0.0 (Python)</p>"
-            "<p><b>Автор:</b> Ваше имя/организация</p>"
+            "<p><b>Автор:</b> Хлюпта Илья Сергеевич/АО НИИ НПО ЛУЧ</p>"
         )
 
     # --- Обработка закрытия окна ---

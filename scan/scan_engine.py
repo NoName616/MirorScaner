@@ -50,6 +50,8 @@ class ScanEngine:
         self.on_scan_resumed: Optional[Callable[[], None]] = None
         self.on_scan_stopped: Optional[Callable[[], None]] = None
         self.on_scan_finished: Optional[Callable[[], None]] = None
+        # For backward compatibility: alias for on_scan_finished
+        self.on_scan_completed: Optional[Callable[[], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
         self.on_data_point: Optional[Callable[[float, float, float, float], None]] = None  # (radius_mm, angle_deg, min_temp, max_temp)
 
@@ -179,8 +181,18 @@ class ScanEngine:
             # Сканирование завершено
             self._is_running = False
             self._logger.log_info(LogCategory.SCAN, "Сканирование завершено")
+            # Notify listeners that scanning has finished
             if self.on_scan_finished:
-                self.on_scan_finished()
+                try:
+                    self.on_scan_finished()
+                except Exception as e:
+                    self._logger.log_error(LogCategory.SCAN, f"Ошибка в on_scan_finished: {e}")
+            # Also notify via on_scan_completed for backward compatibility
+            if self.on_scan_completed:
+                try:
+                    self.on_scan_completed()
+                except Exception as e:
+                    self._logger.log_error(LogCategory.SCAN, f"Ошибка в on_scan_completed: {e}")
                 
         except Exception as e:
             self._is_running = False

@@ -51,13 +51,14 @@ class CalibrationService:
         return self._calibration_data
 
     def set_calibration_data(self, data: CameraCalibrationData) -> None:
-    """
-    Sets the current calibration data.
-    Parameters:
-        data: A ``CameraCalibrationData`` instance containing calibration points,
-              metadata and camera position.
-    """
-    self._calibration_data = data
+        """
+        Sets the current calibration data.
+
+        Parameters:
+            data: A ``CameraCalibrationData`` instance containing calibration points,
+                  metadata and camera position.
+        """
+        self._calibration_data = data
 
 
     def is_calibrated(self) -> bool:

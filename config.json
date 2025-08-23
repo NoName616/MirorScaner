@@ -1,5 +1,5 @@
 {
-    "com_port": "COM3",
+    "com_port": "",
     "baud_rate": 115200,
     "default_radius_mm": 50.0,
     "default_step_mm": 1.0,
@@ -13,25 +13,27 @@
     "steppers": [
         {
             "axis_name": "X",
-            "spd": 10,
-            "acc": 10,
-            "cur": 255,
-            "curh": 255,
-            "max": 60949,
-            "microstep": 7,
-            "rotatesteps": 1000,
-            "deceleration": 10
+            "spd": 500,
+            "acc": 1000,
+            "deceleration": 1000,
+            "cur": 100,
+            "curh": 80,
+            "max_steps": 100000,
+            "microstep": 4,
+            "rotate_steps": 200,
+            "pitch": 8.0
         },
         {
-            "axis_name": "Theta",
-            "spd": 35,
-            "acc": 500,
-            "cur": 255,
-            "curh": 120,
-            "max": -732353,
-            "microstep": 7,
-            "rotatesteps": 1000,
-            "deceleration": 500
+            "axis_name": "THETA",
+            "spd": 500,
+            "acc": 1000,
+            "deceleration": 1000,
+            "cur": 100,
+            "curh": 80,
+            "max_steps": 100000,
+            "microstep": 4,
+            "rotate_steps": 200,
+            "pitch": 8.0
         }
     ]
 }

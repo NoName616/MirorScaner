@@ -5,7 +5,7 @@ from typing import List
 
 from .calibration_point import CalibrationPoint
 from .calibration_metadata import CalibrationMetadata
-
+from .camera_position import CameraPosition
 
 
 @dataclass

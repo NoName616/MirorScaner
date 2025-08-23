@@ -42,9 +42,21 @@ class AxisController:
         # Improvement: For theta, simulate encoder value
         self._encoder_value = 0  # Placeholder for encoder reading
         
-        # Подписываемся на события контроллера
-        self._controller.on_calibration_done = self._on_calibration_done
-        self._controller.on_homing_done = self._on_homing_done
+        # Подписываемся на события контроллера (append handlers instead of overwrite)
+        # Register our callbacks so that multiple AxisController instances can
+        # receive events without overwriting each other.  The controller now
+        # maintains lists of callbacks for these events.
+        if hasattr(self._controller, 'on_calibration_done'):
+            try:
+                self._controller.on_calibration_done.append(self._on_calibration_done)
+            except AttributeError:
+                # Fallback for older versions where on_calibration_done is a single callable
+                self._controller.on_calibration_done = self._on_calibration_done
+        if hasattr(self._controller, 'on_homing_done'):
+            try:
+                self._controller.on_homing_done.append(self._on_homing_done)
+            except AttributeError:
+                self._controller.on_homing_done = self._on_homing_done
 
     def _on_calibration_done(self):
         """Обработчик завершения калибровки."""
@@ -150,15 +162,30 @@ class AxisController:
         try:
             # Создаём future для ожидания события завершения
             future = asyncio.get_event_loop().create_future()
-            
+
             def on_move_done():
+                # Callback invoked when movement is reported done. It resolves
+                # the future exactly once and removes itself from the list of
+                # listeners to prevent memory leaks.
                 if not future.done():
                     future.set_result(True)
-            
-            # Временно подменяем обработчик
-            original_handler = self._controller.on_movement_done
-            self._controller.on_movement_done = on_move_done
-            
+                # Remove this callback from controller's list
+                try:
+                    if hasattr(self._controller, 'on_movement_done') and isinstance(self._controller.on_movement_done, list):
+                        self._controller.on_movement_done.remove(on_move_done)
+                except ValueError:
+                    pass
+
+            # Append our temporary handler
+            appended = False
+            if hasattr(self._controller, 'on_movement_done') and isinstance(self._controller.on_movement_done, list):
+                self._controller.on_movement_done.append(on_move_done)
+                appended = True
+            else:
+                # Fallback: replace single callback
+                original_handler = self._controller.on_movement_done
+                self._controller.on_movement_done = on_move_done
+
             try:
                 await asyncio.wait_for(future, timeout=timeout)
                 self._current_position_steps = steps + self._zero_offset_steps
@@ -167,9 +194,16 @@ class AxisController:
                 self._logger.log_error(LogCategory.CONTROLLER, f"Таймаут перемещения оси {self._axis}")
                 return False
             finally:
-                # Восстанавливаем оригинальный обработчик
-                self._controller.on_movement_done = original_handler
-                
+                # If we replaced a single callback, restore it
+                if not appended:
+                    self._controller.on_movement_done = original_handler
+                # If we appended but the callback hasn't been removed yet, remove it
+                elif hasattr(self._controller, 'on_movement_done') and isinstance(self._controller.on_movement_done, list):
+                    try:
+                        self._controller.on_movement_done.remove(on_move_done)
+                    except ValueError:
+                        pass
+
         except Exception as e:
             self._logger.log_error(LogCategory.CONTROLLER, f"Ошибка перемещения оси {self._axis}: {e}")
             raise AxisControllerException(f"Ошибка перемещения: {e}") from e
