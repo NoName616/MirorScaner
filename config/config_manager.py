@@ -31,16 +31,29 @@ class ConfigManager:
                 data = json.loads(content)
             # Валидация и создание объекта конфигурации
             config = AppConfig(**data)
+            # Store the origin path on the model so that the UI can prepopulate
+            # file dialogs and save back to the same location.  This attribute
+            # is not persisted to disk.
+            try:
+                # Assigning directly is safe because pydantic models allow
+                # setting arbitrary attributes unless frozen.
+                config.config_file_path = path
+            except Exception:
+                pass
             print(f"[INFO] Конфигурация загружена из {path}")
             return config
         except (json.JSONDecodeError, ValueError) as e:
             print(f"[ERROR] Ошибка загрузки конфигурации из {path}: {e}. Использую конфигурацию по умолчанию.")
             default_config = AppConfig.default()
+            # remember where it came from
+            default_config.config_file_path = path
             ConfigManager.save(path, default_config)  # Overwrite invalid file
             return default_config
         except Exception as e:
             print(f"[ERROR] Ошибка загрузки конфигурации из {path}: {e}. Использую конфигурацию по умолчанию.")
-            return AppConfig.default()  # Use default on error
+            cfg = AppConfig.default()
+            cfg.config_file_path = path
+            return cfg  # Use default on error
 
     @staticmethod
     def save(path: str, config: AppConfig):
@@ -54,7 +67,14 @@ class ConfigManager:
                 os.makedirs(dirname, exist_ok=True)
             
             with open(path, 'w', encoding='utf-8') as f:
-                json.dump(config.model_dump(), f, indent=4, ensure_ascii=False)
+                # Exclude internal fields such as config_file_path from being
+                # persisted to disk.  model_dump returns a plain dict with
+                # enumerations converted to their values thanks to the
+                # ``use_enum_values`` config on the pydantic model.
+                # Use ``mode='json'`` so that enum values are converted to their
+                # underlying representations (e.g. OutputFormat.CSV -> "csv").
+                data = config.model_dump(exclude={"config_file_path"}, mode='json')
+                json.dump(data, f, indent=4, ensure_ascii=False)
             print(f"[INFO] Конфигурация сохранена в {path}")
         except Exception as e:
             print(f"[ERROR] Ошибка сохранения конфигурации в {path}: {e}")

@@ -6,7 +6,7 @@
 import serial
 import time
 import threading
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, List
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from utils.logger import DataLogger, LogCategory
@@ -47,9 +47,10 @@ class Stm32ControllerService:
         self.on_connected: Optional[Callable[[], None]] = None
         self.on_disconnected: Optional[Callable[[], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
-        self.on_calibration_done: Optional[Callable[[], None]] = None
-        self.on_homing_done: Optional[Callable[[str], None]] = None
-        self.on_movement_done: Optional[Callable[[], None]] = None
+        # Lists of callbacks for events that can have multiple listeners
+        self.on_calibration_done: List[Callable[[], None]] = []
+        self.on_homing_done: List[Callable[[str], None]] = []
+        self.on_movement_done: List[Callable[[], None]] = []
 
     def connect(self, port: str, baudrate: int = 115200, timeout: float = 2.0) -> bool:
         """Подключается к контроллеру через COM-порт."""
@@ -144,22 +145,37 @@ class Stm32ControllerService:
     def _handle_calibration_done(self, response: str):
         """Обработчик завершения калибровки."""
         self._logger.log_info(LogCategory.CONTROLLER, "Калибровка завершена")
-        if self.on_calibration_done:
-            self.on_calibration_done()
+        # Notify all subscribers
+        for callback in list(self.on_calibration_done):
+            try:
+                callback()
+            except Exception as e:
+                self._logger.log_error(LogCategory.CONTROLLER,
+                                      f"Ошибка в обработчике on_calibration_done: {e}")
 
     def _handle_homing_done(self, response: str):
         """Обработчик завершения homing."""
         parts = response.split(":")
         axis = parts[1].strip() if len(parts) > 1 else "Unknown"
         self._logger.log_info(LogCategory.CONTROLLER, f"Homing оси {axis} завершён")
-        if self.on_homing_done:
-            self.on_homing_done(axis)
+        # Notify all subscribers with axis identifier
+        for callback in list(self.on_homing_done):
+            try:
+                callback(axis)
+            except Exception as e:
+                self._logger.log_error(LogCategory.CONTROLLER,
+                                      f"Ошибка в обработчике on_homing_done: {e}")
 
     def _handle_move_done(self, response: str):
         """Обработчик завершения перемещения."""
         self._logger.log_info(LogCategory.CONTROLLER, "Перемещение завершено")
-        if self.on_movement_done:
-            self.on_movement_done()
+        # Notify all subscribers
+        for callback in list(self.on_movement_done):
+            try:
+                callback()
+            except Exception as e:
+                self._logger.log_error(LogCategory.CONTROLLER,
+                                      f"Ошибка в обработчике on_movement_done: {e}")
 
     def disconnect(self):
         """Отключается от контроллера."""
@@ -313,28 +329,29 @@ class Stm32ControllerService:
         response_value = [None] # Используем список для мутации внутри замыкания
         
         def on_data_received(data: str) -> None:
-    """
-    Temporary handler capturing a single response from the controller.
-    Assigns the received data to ``response_value`` and resolves the
-    awaiting future exactly once.
-    """
-    if not future.done():
-        response_value[0] = data
-        response_received.set()
-        future.set_result(data)
+            """Temporary handler capturing a single response from the controller.
 
-        
+            Assigns the received data to ``response_value`` and resolves the awaiting
+            future exactly once. This closure is substituted for ``self.on_data_received``
+            during the asynchronous command execution to intercept the first reply.
+            """
+            if not future.done():
+                response_value[0] = data
+                response_received.set()
+                future.set_result(data)
+
         # Временно подменяем обработчик
         original_handler = self.on_data_received
         self.on_data_received = on_data_received
-        
+
         try:
             self.send_command(command)
             # Ждём ответ или таймаут
             await asyncio.wait_for(future, timeout=timeout)
             return response_value[0]
         except asyncio.TimeoutError:
-            self._logger.log_warn(LogCategory.CONTROLLER, f"Таймаут ожидания ответа на команду '{command}'")
+            self._logger.log_warn(LogCategory.CONTROLLER,
+                                  f"Таймаут ожидания ответа на команду '{command}'")
             if not future.done():
                 future.set_result(None)
             return None

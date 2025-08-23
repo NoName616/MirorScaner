@@ -30,17 +30,30 @@ class CalibrationPoint:
             "world_point": {"x": self.world_point[0], "y": self.world_point[1]}
         }
 
-  @classmethod
-  def from_dict(cls, data: dict) -> 'CalibrationPoint':
-    """
-    Creates a calibration point from a dictionary representation.
-    The expected format is:
-    {"image_point": {"x": int, "y": int}, "world_point": {"x": float, "y": float}}.
-    """
-    img_data = data.get("image_point", {})
-    world_data = data.get("world_point", {})
-    return cls(
-        image_point=(int(img_data.get("x", 0)), int(img_data.get("y", 0))),
-        world_point=(float(world_data.get("x", 0.0)), float(world_data.get("y", 0.0)))
-    )
+    @classmethod
+    def from_dict(cls, data: dict) -> "CalibrationPoint":
+        """Create a ``CalibrationPoint`` instance from a dictionary.
+
+        The input dictionary should have the structure::
+
+            {
+                "image_point": {"x": int, "y": int},
+                "world_point": {"x": float, "y": float}
+            }
+
+        Missing values default to zero. The method converts dictionary values
+        to the appropriate types and returns a new ``CalibrationPoint``.
+
+        Args:
+            data: A dictionary with keys ``image_point`` and ``world_point``.
+
+        Returns:
+            CalibrationPoint: An instance constructed from the provided data.
+        """
+        img_data = data.get("image_point", {})
+        world_data = data.get("world_point", {})
+        return cls(
+            image_point=(int(img_data.get("x", 0)), int(img_data.get("y", 0))),
+            world_point=(float(world_data.get("x", 0.0)), float(world_data.get("y", 0.0)))
+        )
 

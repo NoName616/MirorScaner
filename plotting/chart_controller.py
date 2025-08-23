@@ -18,8 +18,8 @@ class ChartController:
         self._figure = None
         self._ax = None
 
-    def plot_temperature_map(self, data: List[Tuple[float, float, float, float]], 
-                             title: str = "Temperature Map"):
+    def plot_temperature_map(self, data: List[Tuple[float, float, float, float]],
+                             title: str = "Temperature Map") -> None:
         """
         Строит тепловую карту температур.
         
@@ -27,7 +27,7 @@ class ChartController:
              Список кортежей (radius_mm, angle_deg, min_temp, max_temp).
             title: Заголовок графика.
         """
-        if not 
+        if not data:
             print("Нет данных для построения графика")
             return
 
@@ -60,8 +60,8 @@ class ChartController:
         plt.tight_layout()
         plt.show()
 
-    def plot_temperature_profile(self,  List[Tuple[float, float, float, float]], 
-                                 title: str = "Temperature Profile"):
+    def plot_temperature_profile(self, data: List[Tuple[float, float, float, float]],
+                                 title: str = "Temperature Profile") -> None:
         """
         Строит профиль температур (температура vs. радиус или угол).
         
@@ -95,8 +95,8 @@ class ChartController:
         plt.tight_layout()
         plt.show()
 
-    def plot_polar_temperature(self,  List[Tuple[float, float, float, float]], 
-                               title: str = "Polar Temperature Distribution"):
+    def plot_polar_temperature(self, data: List[Tuple[float, float, float, float]],
+                               title: str = "Polar Temperature Distribution") -> None:
         """
         Строит полярный график распределения температур.
         
@@ -104,7 +104,7 @@ class ChartController:
              Список кортежей (radius_mm, angle_deg, min_temp, max_temp).
             title: Заголовок графика.
         """
-        if not 
+        if not data:
             print("Нет данных для построения графика")
             return
 

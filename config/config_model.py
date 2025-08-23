@@ -145,16 +145,173 @@ class StepperConfig:
         return ";".join(parts)
 
 
-class AppConfig:
-    """Class to hold the application configuration consisting of multiple StepperConfigs."""
-    def __init__(self, steppers: List[StepperConfig]):
-        self.steppers: List[StepperConfig] = steppers
+# ---
+# The original AppConfig defined in this file was merely a shell around a list of
+# StepperConfigs parsed from the legacy C# style ``config.cfg`` file.  However,
+# the Python application relies on a much richer configuration loaded from a
+# JSON file (see ``config.json``) which includes global settings (COM port,
+# baud rate, default scanning parameters, output formats, etc.), camera
+# settings and a list of stepper motor configurations.  To support this
+# structure we define a new pydantic-based model below.  Using pydantic
+# simplifies validation and serialisation, and ensures that enumerations are
+# correctly handled.  The legacy dataclass ``StepperConfig`` defined above
+# remains intact for compatibility with the ``config.cfg`` editor and parsing
+# routines.
+
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List
+
+# Re‑use the pydantic StepperConfig used in the scanning module so that
+# distances/angles can be converted correctly.  Note: this import is
+# intentionally local to avoid a circular import at module load time.
+from scan.stepper_config import StepperConfig as PydanticStepperConfig
+from scan.data_writer import OutputFormat, AngleUnit
+
+
+class CameraConfig(BaseModel):
+    """Configuration related to the thermal camera."""
+    calibration_file_path: str = Field(
+        "calibration_data.json",
+        description="Path to the file where camera calibration data is stored"
+    )
+
+
+class AppConfig(BaseModel):
+    """
+    High level application configuration loaded from ``config.json``.
+
+    This model defines all of the tunable parameters exposed in the GUI,
+    including serial settings, default scanning parameters, output format
+    preferences, camera settings and a list of stepper motor definitions.
+
+    A ``config_file_path`` attribute is stored alongside the parsed data so
+    that the UI knows where the configuration originated.  When a new
+    configuration is loaded via the ``open config`` menu the path is updated.
+    """
+
+    # Serial port settings
+    com_port: str = Field(
+        default="",
+        description="The name of the COM port used to communicate with the STM32 controller"
+    )
+    baud_rate: int = Field(
+        default=115200,
+        ge=1200,
+        le=1000000,
+        description="Baud rate for the serial connection"
+    )
+
+    # Default scanning parameters
+    default_radius_mm: float = Field(
+        default=50.0,
+        gt=0.0,
+        description="Maximum radius of the scan in millimetres"
+    )
+    default_step_mm: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Radial step in millimetres between concentric circles"
+    )
+    default_arc_step_mm: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Arc step in millimetres along a given circle"
+    )
+    default_delay_ms: int = Field(
+        default=1000,
+        ge=0,
+        description="Delay in milliseconds between measurements"
+    )
+
+    # Output file format and angle units
+    default_output_format: OutputFormat = Field(
+        default=OutputFormat.CSV,
+        description="Default file format for scan results (txt, md or csv)"
+    )
+    default_angle_unit: AngleUnit = Field(
+        default=AngleUnit.DEGREES,
+        description="Units for representing angles (degrees or dms)"
+    )
+
+    # Nested camera configuration
+    camera: CameraConfig = Field(
+        default_factory=CameraConfig,
+        description="Embedded configuration specific to the thermal camera"
+    )
+
+    # List of stepper motor configurations.  Two motors (X and Theta) are
+    # created by default.  Each entry is parsed into the pydantic
+    # ``StepperConfig`` from ``scan.stepper_config`` for consistency with the
+    # motion control logic.
+    steppers: List[PydanticStepperConfig] = Field(
+        default_factory=lambda: [
+            PydanticStepperConfig(axis_name="X"),
+            PydanticStepperConfig(axis_name="Theta")
+        ],
+        description="List of stepper motor configurations"
+    )
+
+    # Path to the JSON file from which this configuration was loaded.  This
+    # attribute is not present in the JSON itself but is set by the
+    # ``ConfigManager`` when reading.  It enables the GUI to prepopulate
+    # file dialogs and to save the configuration back to the correct file.
+    config_file_path: Optional[str] = Field(
+        default=None,
+        description="Internal: path of the loaded configuration file"
+    )
+
+    class Config:
+        # When serialising models to dict/JSON include enumerations as their
+        # underlying values (e.g. "csv" instead of OutputFormat.CSV).  This
+        # ensures compatibility with the existing config.json format.
+        use_enum_values = True
+        # Ignore unknown keys in the input JSON so that older configs don't
+        # break when new fields are added.
+        extra = "ignore"
+
+    # Validator to convert legacy stepper definitions with different key
+    # names (e.g. 'max' instead of 'max_steps') into proper ``StepperConfig``
+    # objects.  The ``pre=True`` flag ensures this runs before pydantic
+    # attempts to coerce the list elements.
+    @validator('steppers', pre=True)
+    def _parse_steppers(cls, v):
+        if not v:
+            # If no steppers provided, return default two motors
+            return [
+                PydanticStepperConfig(axis_name="X"),
+                PydanticStepperConfig(axis_name="Theta")
+            ]
+        processed = []
+        for item in v:
+            if isinstance(item, dict):
+                # Rename keys from legacy config.json to match pydantic model
+                mapped = {}
+                for k, val in item.items():
+                    key = k.lower()
+                    if key == 'max':
+                        # Clamp negative values of max_steps to default by not setting
+                        if isinstance(val, (int, float)) and val >= 1:
+                            mapped['max_steps'] = val
+                    elif key == 'rotatesteps':
+                        mapped['rotate_steps'] = val
+                    else:
+                        mapped[key] = val
+                # Ensure axis name is uppercase
+                if 'axis_name' in mapped and isinstance(mapped['axis_name'], str):
+                    mapped['axis_name'] = mapped['axis_name'].upper()
+                processed.append(PydanticStepperConfig(**mapped))
+            elif isinstance(item, PydanticStepperConfig):
+                processed.append(item)
+            else:
+                # Unsupported type
+                raise ValueError(f"Invalid stepper config: {item}")
+        return processed
 
     @classmethod
-    def from_lines(cls, lines: List[str]) -> 'AppConfig':
-        """Parse multiple config lines into an AppConfig instance."""
-        steppers: List[StepperConfig] = []
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith('#'):
-            ...
+    def default(cls) -> 'AppConfig':
+        """
+        Returns a default AppConfig instance.  All values mirror sensible
+        defaults found in the original C# application.  Two stepper motors
+        (X and Theta) are created with default parameters.
+        """
+        return cls()

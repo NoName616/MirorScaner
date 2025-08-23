@@ -50,7 +50,9 @@ class AnalysisService:
         self._object_type = value
         # При смене типа поверхности можно при необходимости загрузить другую калибровку
         if self._logger:
-            self._logger.log_info("GENERAL", f"Установлен тип поверхности: {value}")
+            # Use proper enum category for logging
+            from utils.logger import LogCategory
+            self._logger.log_info(LogCategory.GENERAL, f"Установлен тип поверхности: {value}")
 
     @property
     def roi(self) -> Optional[Tuple[int, int, int, int]]:
@@ -81,7 +83,8 @@ class AnalysisService:
         self._previous_max_temp = None
         self._previous_max_pos = None
         if self._logger:
-            self._logger.log_info("GENERAL", f"ROI задан: ({x_min}, {y_min}) - ({x_max}, {y_max})")
+            from utils.logger import LogCategory
+            self._logger.log_info(LogCategory.GENERAL, f"ROI задан: ({x_min}, {y_min}) - ({x_max}, {y_max})")
         # Если запись была активна, остановим её (новая область – новое измерение)
         if self._recording:
             self.stop_recording()
@@ -98,7 +101,8 @@ class AnalysisService:
         ny2 = min(max(y2, ry1), ry2)
         self._lines.append(((nx1, ny1), (nx2, ny2)))
         if self._logger:
-            self._logger.log_info("GENERAL", f"Добавлена линия: ({nx1}, {ny1}) - ({nx2}, {ny2})")
+            from utils.logger import LogCategory
+            self._logger.log_info(LogCategory.GENERAL, f"Добавлена линия: ({nx1}, {ny1}) - ({nx2}, {ny2})")
         # В данной реализации не поддерживается добавление линии во время записи
 
     def clear_lines(self):
@@ -109,7 +113,8 @@ class AnalysisService:
         self._previous_max_temp = None
         self._previous_max_pos = None
         if self._logger:
-            self._logger.log_info("GENERAL", "Выбор области и линий сброшен.")
+            from utils.logger import LogCategory
+            self._logger.log_info(LogCategory.GENERAL, "Выбор области и линий сброшен.")
         # Остановка записи, если она шла
         if self._recording:
             self.stop_recording()
@@ -125,8 +130,11 @@ class AnalysisService:
         try:
             self._output_file = open(self._output_file_path, mode='w', encoding='utf-8')
         except Exception as e:
+            # Ошибка при открытии файла
             if self._logger:
-                self._logger.log_error("GENERAL", f"Не удалось открыть файл для записи: {e}")
+                from utils.logger import LogCategory
+                self._logger.log_error(LogCategory.GENERAL,
+                                       f"Не удалось открыть файл для записи: {e}")
             return False
         # Записываем заголовок CSV: Timestamp и столбцы для каждой линии (avg, min, max)
         header = "Timestamp"
@@ -135,7 +143,9 @@ class AnalysisService:
         self._output_file.write(header + "\n")
         self._recording = True
         if self._logger:
-            self._logger.log_info("GENERAL", f"Запись результатов в файл {self._output_file_path} начата.")
+            from utils.logger import LogCategory
+            self._logger.log_info(LogCategory.GENERAL,
+                                  f"Запись результатов в файл {self._output_file_path} начата.")
         return True
 
     def stop_recording(self):
@@ -149,7 +159,8 @@ class AnalysisService:
                     pass
                 self._output_file = None
             if self._logger:
-                self._logger.log_info("GENERAL", "Запись результатов в файл остановлена.")
+                from utils.logger import LogCategory
+                self._logger.log_info(LogCategory.GENERAL, "Запись результатов в файл остановлена.")
 
     def _get_line_pixels(self, frame: np.ndarray, p1: Tuple[int, int], p2: Tuple[int, int]) -> List[int]:
         """Возвращает список значений пикселей вдоль линии p1->p2 (алгоритм Брезенхэма)."""
